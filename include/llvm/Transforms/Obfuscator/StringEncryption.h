@@ -4,7 +4,7 @@
 
 namespace llvm {
 
-	class StringEncryptionPass : public PassInfoMixin<StringEncryptionPass> {
+	class StringEncryptionPass : public RequiredPassInfoMixin<StringEncryptionPass> {
 	public:
 		PreservedAnalyses run(Module& M, ModuleAnalysisManager& AM);
 		static bool isRequired() { return true; }

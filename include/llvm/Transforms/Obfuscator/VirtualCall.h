@@ -6,11 +6,10 @@ namespace llvm {
 
 
 
-	class VirtualCallPass : public PassInfoMixin<VirtualCallPass> {
+	class VirtualCallPass : public RequiredPassInfoMixin<VirtualCallPass> {
 	public:
 		PreservedAnalyses run(Function& F, FunctionAnalysisManager& AM);
 		static bool isRequired() { return true; }
 	};
 
 } // namespace llvm
-

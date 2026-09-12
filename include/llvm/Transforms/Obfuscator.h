@@ -30,7 +30,7 @@
 namespace llvm {
 
 	class ObfuscationFunctionDriverPass
-		: public PassInfoMixin<ObfuscationFunctionDriverPass> {
+		: public RequiredPassInfoMixin<ObfuscationFunctionDriverPass> {
 	public:
 		PreservedAnalyses run(Function& F, FunctionAnalysisManager& FAM) {
 			if (F.isDeclaration())
@@ -57,6 +57,12 @@ namespace llvm {
 					errs() << "[obf] skip " << F.getName() << ": MaxLoopDepth=" << FOC.MaxLoopDepth
 					<< " > obf-max-loop-depth=" << ObfMaxLoopDepth << "\n";
 				FuncSkipReason = "cap_max_loop_depth";
+			}
+			else if (!ObfDefaultConfig.empty() && FOC.HasInlineAsm) {
+				if (ObfVerbose)
+					errs() << "[obf] skip " << F.getName()
+					       << ": direct inline assembly in uniformly selected function\n";
+				FuncSkipReason = "contains_inline_asm";
 			}
 
 			// Function-level cap: optionally fatal under -obf-no-skips.
@@ -476,7 +482,7 @@ namespace llvm {
 		static bool isRequired() { return true; }
 	};
 
-	class ObfuscationModulePass : public PassInfoMixin<ObfuscationModulePass> {
+	class ObfuscationModulePass : public RequiredPassInfoMixin<ObfuscationModulePass> {
 	public:
 		PreservedAnalyses run(Module& M, ModuleAnalysisManager& MAM) {
 			// Prime the report sink early so function passes can append via proxy.

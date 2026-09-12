@@ -35,7 +35,7 @@ namespace llvm {
 	///      instructions (stripped by a late cleanup if desired).
 	///
 	class AntiOptimizationShieldPass
-		: public PassInfoMixin<AntiOptimizationShieldPass> {
+		: public RequiredPassInfoMixin<AntiOptimizationShieldPass> {
 	public:
 		PreservedAnalyses run(Function& F, FunctionAnalysisManager& AM);
 		static bool isRequired() { return true; }

@@ -4,7 +4,7 @@
 
 namespace llvm {
 
-	class ObfDumpConfigPass : public PassInfoMixin<ObfDumpConfigPass> {
+	class ObfDumpConfigPass : public RequiredPassInfoMixin<ObfDumpConfigPass> {
 	public:
 		PreservedAnalyses run(Module& M, ModuleAnalysisManager& MAM);
 		static bool isRequired() { return true; }

@@ -2,7 +2,7 @@
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
-	class AntiDecompilerPass : public PassInfoMixin<AntiDecompilerPass> {
+	class AntiDecompilerPass : public RequiredPassInfoMixin<AntiDecompilerPass> {
 	public:
 		PreservedAnalyses run(Function& F, FunctionAnalysisManager& AM);
 		static bool isRequired() { return true; }

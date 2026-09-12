@@ -6,7 +6,7 @@ namespace llvm {
 
 	/// obf-metrics: prints per-function structural metrics (JSON lines) without
 	/// modifying IR. Intended for regression tracking and strength proxies.
-	class ObfMetricsPass : public PassInfoMixin<ObfMetricsPass> {
+	class ObfMetricsPass : public RequiredPassInfoMixin<ObfMetricsPass> {
 	public:
 		PreservedAnalyses run(Module& M, ModuleAnalysisManager& MAM);
 

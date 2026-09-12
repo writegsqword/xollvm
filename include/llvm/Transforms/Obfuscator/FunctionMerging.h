@@ -4,7 +4,7 @@
 
 namespace llvm {
 
-	class FunctionMergingPass : public PassInfoMixin<FunctionMergingPass> {
+	class FunctionMergingPass : public RequiredPassInfoMixin<FunctionMergingPass> {
 	public:
 		PreservedAnalyses run(Module& M, ModuleAnalysisManager& AM);
 		static bool isRequired() { return true; }

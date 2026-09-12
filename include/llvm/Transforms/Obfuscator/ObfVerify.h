@@ -11,7 +11,7 @@
 
 namespace llvm::obf {
 
-	class ObfVerifyFunctionPass : public llvm::PassInfoMixin<ObfVerifyFunctionPass> {
+	class ObfVerifyFunctionPass : public llvm::RequiredPassInfoMixin<ObfVerifyFunctionPass> {
 		std::string Label;
 
 	public:
@@ -31,7 +31,7 @@ namespace llvm::obf {
 		static bool isRequired() { return true; }
 	};
 
-	class ObfVerifyModulePass : public llvm::PassInfoMixin<ObfVerifyModulePass> {
+	class ObfVerifyModulePass : public llvm::RequiredPassInfoMixin<ObfVerifyModulePass> {
 		std::string Label;
 
 	public:

@@ -6,7 +6,7 @@
 
 namespace llvm::obf {
 
-	class ObfRepairSSAFunctionPass : public llvm::PassInfoMixin<ObfRepairSSAFunctionPass> {
+	class ObfRepairSSAFunctionPass : public llvm::RequiredPassInfoMixin<ObfRepairSSAFunctionPass> {
 		std::string Label;
 
 	public:
