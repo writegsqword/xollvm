@@ -36,6 +36,14 @@ grep -q 'load volatile ptr' "$work/defaults.obf.ll"
 clang "$work/defaults.obf.ll" -O1 -o "$work/defaults"
 "$work/defaults"
 
+# Exercise the actual Clang extension-point integration as used by a compiler
+# wrapper. The source remains annotation-free.
+clang -O1 -fpass-plugin="$plugin" \
+  -mllvm -enable-obfuscation \
+  '-mllvm=-obf-default-config=constenc(prob=100,maxSites=16,minAbs=2,encFP=0)' \
+  "$here/defaults.c" -o "$work/defaults.direct"
+"$work/defaults.direct"
+
 clang++ -S -emit-llvm -O0 -Xclang -disable-O0-optnone \
   "$here/static_lifetime.cpp" \
   -o "$work/static_lifetime.ll"
@@ -48,9 +56,21 @@ grep -q '__strenc_global_init' "$work/static_lifetime.obf.ll"
 clang++ "$work/static_lifetime.obf.ll" -O1 -o "$work/static_lifetime"
 "$work/static_lifetime"
 
+clang++ -O0 -Xclang -disable-O0-optnone -fpass-plugin="$plugin" \
+  -mllvm -enable-obfuscation \
+  '-mllvm=-obf-default-config=strenc(cipher=aes,storage=global,minlen=8)' \
+  "$here/static_lifetime.cpp" -o "$work/static_lifetime.direct"
+"$work/static_lifetime.direct"
+
 if strings "$work/static_lifetime" | grep -q \
     'xollvm-static-lifetime-sentinel-7Y4Q2'; then
   echo "plaintext sentinel remains in transformed executable" >&2
+  exit 1
+fi
+
+if strings "$work/static_lifetime.direct" | grep -q \
+    'xollvm-static-lifetime-sentinel-7Y4Q2'; then
+  echo "plaintext sentinel remains in direct-Clang executable" >&2
   exit 1
 fi
 

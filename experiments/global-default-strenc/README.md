@@ -11,10 +11,11 @@ This project isolates two changes from any Chromium build:
    constructor. It is an experimental alternative to the legacy per-call stack
    buffers.
 
-The test checks unannotated-function selection, indirect branches/calls,
-constructor ordering, returned-pointer lifetime, pointer identity, a pointer
-stored in a global initializer, and absence of the sentinel plaintext in the
-final executable.
+The test checks both the named `opt` pass and Clang's normal extension point,
+plus unannotated-function selection, indirect branches/calls, constructor
+ordering, returned-pointer lifetime, pointer identity, a pointer stored in a
+global initializer, and absence of the sentinel plaintext in the final
+executable.
 
 Run it against a standalone plugin build:
 
