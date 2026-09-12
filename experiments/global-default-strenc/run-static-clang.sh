@@ -54,6 +54,14 @@ grep -Eq 'callq?[[:space:]]+\*' "$work/defaults.disassembly"
   -mllvm "-obf-report-json=$work/fork.json"
 "$work/fork_lifetime"
 
+"$compilerxx" -O1 -fno-inline "$here/exception_flow.cpp" \
+  -o "$work/exception_flow" \
+  -mllvm -enable-obfuscation \
+  "-mllvm=-obf-default-config=$config" \
+  -mllvm -obf-seed=19 -mllvm -obf-deterministic -mllvm -obf-verify \
+  -mllvm "-obf-report-json=$work/exception.json"
+"$work/exception_flow"
+
 if "$compiler" -O1 -c "$here/annotation_rejected.c" \
     -o "$work/annotation_rejected.o" \
     -mllvm -enable-obfuscation \
@@ -87,9 +95,10 @@ done
 "$work/shared_boundary"
 
 for artifact in "$work/static_lifetime" "$work/fork_lifetime" \
+    "$work/exception_flow" \
     "$work/multi_tu" "$work/libcomponent.so" "$work/shared_boundary"; do
   if strings "$artifact" | grep -Eq \
-      'xollvm-(static|fork|component)-lifetime-sentinel|xollvm-component-sentinel'; then
+      'xollvm-(static|fork|component|exception)-lifetime-sentinel|xollvm-component-sentinel'; then
     echo "plaintext sentinel remains in $artifact" >&2
     exit 1
   fi
