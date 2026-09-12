@@ -184,7 +184,10 @@ else()
   set(_OBF_LINK_COMPONENTS "")
 endif()
 
-add_llvm_pass_plugin(Obfuscator
+set(OBFUSCATOR_TARGET_NAME "Obfuscator" CACHE STRING
+    "CMake target/output name for the XOLLVM pass plugin")
+
+add_llvm_pass_plugin(${OBFUSCATOR_TARGET_NAME}
   ${OBF_SOURCES}
   ${AES_GENERATED_INC}
   ${_OBF_DEPENDS}
@@ -194,7 +197,7 @@ add_llvm_pass_plugin(Obfuscator
 # The AES stub .inc must be generated before any obfuscator source that
 # includes it is compiled. Under LINK_INTO_TOOLS add_llvm_pass_plugin compiles
 # into obj.Obfuscator (not Obfuscator), so depend on both targets.
-add_dependencies(Obfuscator aes_stub_inc)
-if(TARGET obj.Obfuscator)
-  add_dependencies(obj.Obfuscator aes_stub_inc)
+add_dependencies(${OBFUSCATOR_TARGET_NAME} aes_stub_inc)
+if(TARGET obj.${OBFUSCATOR_TARGET_NAME})
+  add_dependencies(obj.${OBFUSCATOR_TARGET_NAME} aes_stub_inc)
 endif()

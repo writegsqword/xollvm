@@ -16,8 +16,8 @@ using namespace llvm::obf::adec;
 
 namespace {
 
-static bool canConvertBranch(llvm::BranchInst* BI) {
-	if (!BI || !BI->isUnconditional())
+static bool canConvertBranch(llvm::UncondBrInst* BI) {
+	if (!BI)
 		return false;
 
 	llvm::BasicBlock* BB = BI->getParent();
@@ -48,9 +48,9 @@ public:
 	}
 
 	unsigned run(ADecCtx& Ctx, unsigned Budget) override {
-		llvm::SmallVector<llvm::BranchInst*, 32> Cands;
+		llvm::SmallVector<llvm::UncondBrInst*, 32> Cands;
 		for (llvm::BasicBlock& BB : Ctx.F) {
-			auto* BI = llvm::dyn_cast<llvm::BranchInst>(BB.getTerminator());
+			auto* BI = llvm::dyn_cast<llvm::UncondBrInst>(BB.getTerminator());
 			if (canConvertBranch(BI))
 				Cands.push_back(BI);
 		}
@@ -58,7 +58,7 @@ public:
 		if (Cands.empty())
 			return 0;
 
-		Ctx.ShuffleRng.shuffle(llvm::MutableArrayRef<llvm::BranchInst*>(
+		Ctx.ShuffleRng.shuffle(llvm::MutableArrayRef<llvm::UncondBrInst*>(
 		    Cands.data(), Cands.size()));
 
 		// Decoy destinations cannot be picked from existing BBs: adding a
@@ -78,7 +78,7 @@ public:
 		int EffProb = Ctx.Cfg.effectiveProb(name());
 
 		unsigned Converted = 0;
-		for (llvm::BranchInst* BI : Cands) {
+		for (llvm::UncondBrInst* BI : Cands) {
 			if (Converted >= Budget)
 				break;
 			if (Ctx.SelectRng.range(100) >= (uint32_t)EffProb)
@@ -106,8 +106,8 @@ public:
 			// violate dominance regardless of where SrcBB sits in
 			// the CFG.
 			constexpr unsigned kNumDecoys = 3;
-			auto* IBr =
-			    llvm::IndirectBrInst::Create(Ld, 1 + kNumDecoys, BI);
+			auto* IBr = llvm::IndirectBrInst::Create(
+			    Ld, 1 + kNumDecoys, BI->getIterator());
 			IBr->addDestination(Target);
 
 			for (unsigned i = 0; i < kNumDecoys; ++i) {

@@ -773,9 +773,8 @@ void VMImpl::hardenWrapper() {
 	//  Replace unconditional branches with opaque-predicate branches 
 	auto replaceEdge = [&](BasicBlock* From) {
 		auto* Term = From->getTerminator();
-		if (!Term || !isa<BranchInst>(Term)) return;
-		auto* BI = cast<BranchInst>(Term);
-		if (!BI->isUnconditional()) return;
+		auto* BI = dyn_cast_or_null<UncondBrInst>(Term);
+		if (!BI) return;
 
 		BasicBlock* RealSucc = BI->getSuccessor(0);
 		BasicBlock* FakeDst = DeadBBs[HRng.range((unsigned)DeadBBs.size())];
@@ -843,7 +842,10 @@ void VMImpl::flattenWrapper() {
 
 	// Initial state = tag of the first successor of entry.
 	BasicBlock* FirstSucc = nullptr;
-	if (auto* BI = dyn_cast<BranchInst>(EntryBB->getTerminator())) {
+	if (auto* BI = dyn_cast<UncondBrInst>(EntryBB->getTerminator())) {
+		FirstSucc = BI->getSuccessor(0);
+	}
+	else if (auto* BI = dyn_cast<CondBrInst>(EntryBB->getTerminator())) {
 		FirstSucc = BI->getSuccessor(0);
 	}
 	if (!FirstSucc || !StateMap.count(FirstSucc)) return;
@@ -877,43 +879,42 @@ void VMImpl::flattenWrapper() {
 		if (isa<ReturnInst>(Term) || isa<UnreachableInst>(Term))
 			continue;
 
-		if (auto* BI = dyn_cast<BranchInst>(Term)) {
+		if (auto* BI = dyn_cast<UncondBrInst>(Term)) {
 			IRBuilder<> TB(Term);
 			uint32_t CurTag = StateMap[BB];
 
-			if (BI->isUnconditional()) {
-				BasicBlock* Succ = BI->getSuccessor(0);
-				if (StateMap.count(Succ)) {
-					uint32_t NextTag = StateMap[Succ];
-					uint32_t Delta = CurTag ^ NextTag;
-					Value* Old = TB.CreateLoad(I32Ty, StateVar, "vm.w.flat.old");
-					cast<LoadInst>(Old)->setVolatile(true);
-					Value* New = TB.CreateXor(Old,
-						FOpaque.opaqueI32Const(TB, Delta), "vm.w.flat.xor");
-					TB.CreateStore(New, StateVar)->setVolatile(true);
-					TB.CreateBr(DispBB);
-					Term->eraseFromParent();
-				}
+			BasicBlock* Succ = BI->getSuccessor(0);
+			if (StateMap.count(Succ)) {
+				uint32_t NextTag = StateMap[Succ];
+				uint32_t Delta = CurTag ^ NextTag;
+				Value* Old = TB.CreateLoad(I32Ty, StateVar, "vm.w.flat.old");
+				cast<LoadInst>(Old)->setVolatile(true);
+				Value* New = TB.CreateXor(Old,
+					FOpaque.opaqueI32Const(TB, Delta), "vm.w.flat.xor");
+				TB.CreateStore(New, StateVar)->setVolatile(true);
+				TB.CreateBr(DispBB);
+				Term->eraseFromParent();
 			}
-			else {
-				// Conditional branch (opaque predicates from 06b.3)
-				BasicBlock* TSucc = BI->getSuccessor(0);
-				BasicBlock* FSucc = BI->getSuccessor(1);
-				Value* Cond = BI->getCondition();
+		}
+		else if (auto* BI = dyn_cast<CondBrInst>(Term)) {
+			IRBuilder<> TB(Term);
+			uint32_t CurTag = StateMap[BB];
+			BasicBlock* TSucc = BI->getSuccessor(0);
+			BasicBlock* FSucc = BI->getSuccessor(1);
+			Value* Cond = BI->getCondition();
 
-				if (StateMap.count(TSucc) && StateMap.count(FSucc)) {
-					uint32_t TDelta = CurTag ^ StateMap[TSucc];
-					uint32_t FDelta = CurTag ^ StateMap[FSucc];
-					Value* SelDelta = TB.CreateSelect(Cond,
-						FOpaque.opaqueI32Const(TB, TDelta),
-						FOpaque.opaqueI32Const(TB, FDelta), "vm.w.flat.sel");
-					Value* Old = TB.CreateLoad(I32Ty, StateVar, "vm.w.flat.old");
-					cast<LoadInst>(Old)->setVolatile(true);
-					Value* New = TB.CreateXor(Old, SelDelta, "vm.w.flat.xor");
-					TB.CreateStore(New, StateVar)->setVolatile(true);
-					TB.CreateBr(DispBB);
-					Term->eraseFromParent();
-				}
+			if (StateMap.count(TSucc) && StateMap.count(FSucc)) {
+				uint32_t TDelta = CurTag ^ StateMap[TSucc];
+				uint32_t FDelta = CurTag ^ StateMap[FSucc];
+				Value* SelDelta = TB.CreateSelect(Cond,
+					FOpaque.opaqueI32Const(TB, TDelta),
+					FOpaque.opaqueI32Const(TB, FDelta), "vm.w.flat.sel");
+				Value* Old = TB.CreateLoad(I32Ty, StateVar, "vm.w.flat.old");
+				cast<LoadInst>(Old)->setVolatile(true);
+				Value* New = TB.CreateXor(Old, SelDelta, "vm.w.flat.xor");
+				TB.CreateStore(New, StateVar)->setVolatile(true);
+				TB.CreateBr(DispBB);
+				Term->eraseFromParent();
 			}
 		}
 	}

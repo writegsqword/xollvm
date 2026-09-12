@@ -247,8 +247,10 @@ uint32_t BytecodeEmitter::isize(Instruction* I) {
 		if (Ty->isFloatTy() || Ty->isDoubleTy()) return 7 + NA;  // OP_CALL_F
 		markUnsupported(I); return 0;
 	}
-	if (Op == Instruction::Br)
-		return cast<BranchInst>(I)->isUnconditional() ? 5 : 10;
+	if (Op == Instruction::UncondBr)
+		return 5;
+	if (Op == Instruction::CondBr)
+		return 10;
 
 	if (Op == Instruction::Switch) {
 		auto* SI = cast<SwitchInst>(I);
@@ -974,16 +976,17 @@ void BytecodeEmitter::emit(Instruction* I) {
 	}
 
 
-	if (Op == Instruction::Br) {
-		auto* BI = cast<BranchInst>(I);
-		if (BI->isUnconditional()) {
-			bop(OP_JMP); fixup_u32(BI->getSuccessor(0));
-		}
-		else {
-			bop(OP_JMPC); b8(xorSalt(vr(BI->getCondition())));
-			fixup_u32(BI->getSuccessor(0));
-			fixup_u32(BI->getSuccessor(1));
-		}
+	if (Op == Instruction::UncondBr) {
+		auto* BI = cast<UncondBrInst>(I);
+		bop(OP_JMP); fixup_u32(BI->getSuccessor(0));
+		return;
+	}
+
+	if (Op == Instruction::CondBr) {
+		auto* BI = cast<CondBrInst>(I);
+		bop(OP_JMPC); b8(xorSalt(vr(BI->getCondition())));
+		fixup_u32(BI->getSuccessor(0));
+		fixup_u32(BI->getSuccessor(1));
 		return;
 	}
 

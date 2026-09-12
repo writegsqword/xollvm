@@ -93,7 +93,7 @@ namespace {
 			Instruction* T = BB.getTerminator();
 			if (isa<ReturnInst>(T))
 				++M.Returns;
-			else if (isa<BranchInst>(T))
+			else if (isa<CondBrInst>(T) || isa<UncondBrInst>(T))
 				++M.Branches;
 		}
 

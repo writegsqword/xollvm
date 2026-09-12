@@ -189,8 +189,8 @@ namespace {
 			}
 
 			// Skip EH pads
-			Instruction* FirstNonPHI = curr->getFirstNonPHI();
-			if (FirstNonPHI && FirstNonPHI->isEHPad())
+			auto FirstNonPHI = curr->getFirstNonPHIIt();
+			if (FirstNonPHI != curr->end() && FirstNonPHI->isEHPad())
 				continue;
 
 			// Phase 1.2: Also skip blocks inside EH regions

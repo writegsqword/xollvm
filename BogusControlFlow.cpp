@@ -164,8 +164,8 @@ namespace {
 		if (!BB || BB->empty())
 			return false;
 
-		Instruction* firstNonPHI = BB->getFirstNonPHI();
-		if (firstNonPHI && firstNonPHI->isEHPad())
+		auto firstNonPHI = BB->getFirstNonPHIIt();
+		if (firstNonPHI != BB->end() && firstNonPHI->isEHPad())
 			return false;
 
 		// Skip blocks in EH regions (between landingpad and resume)

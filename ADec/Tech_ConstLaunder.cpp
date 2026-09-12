@@ -44,10 +44,8 @@ static bool isUnsafeUse(llvm::Instruction* User, unsigned OpIdx) {
 	// Branch condition is fine — but we want to preserve it as a literal
 	// because decompilers visually flag ConstantInt branch cond as
 	// "always true/false" anyway; laundering it adds little value here.
-	if (auto* BR = llvm::dyn_cast<llvm::BranchInst>(User)) {
-		if (BR->isConditional() && OpIdx == 0)
-			return true;
-	}
+	if (llvm::isa<llvm::CondBrInst>(User) && OpIdx == 0)
+		return true;
 
 	// Switch case values must be ConstantInt — cannot replace.
 	if (llvm::isa<llvm::SwitchInst>(User))

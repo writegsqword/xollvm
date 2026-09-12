@@ -91,9 +91,8 @@ namespace llvm::obf {
 			++Blocks;
 			Edges += succ_size(&BB);
 
-			if (const auto* Br = dyn_cast<BranchInst>(BB.getTerminator()))
-				if (Br->isConditional())
-					++C.ConditionalBranches;
+			if (isa<CondBrInst>(BB.getTerminator()))
+				++C.ConditionalBranches;
 
 			for (const Instruction& I : BB) {
 				if (isa<ICmpInst>(I) && I.hasName() && I.getName().starts_with("obf."))

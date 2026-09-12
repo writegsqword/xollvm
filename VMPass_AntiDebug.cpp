@@ -266,8 +266,8 @@ void VMImpl::buildAntiDebugGate(VMEngine::SharedState* SS) {
 	Function* EF = SS->EngineFn;
 
 	//  Find FetchBB: it's the false-successor of vm.dispatch ─
-	auto* DispTerm = dyn_cast<BranchInst>(SS->Dispatch->getTerminator());
-	if (!DispTerm || !DispTerm->isConditional()) return;
+	auto* DispTerm = dyn_cast<CondBrInst>(SS->Dispatch->getTerminator());
+	if (!DispTerm) return;
 	BasicBlock* FetchBB = DispTerm->getSuccessor(1); // false = !OOB = fetch
 
 	//  Create counter alloca in vm.entry (before its terminator) ─
@@ -311,7 +311,7 @@ void VMImpl::buildAntiDebugGate(VMEngine::SharedState* SS) {
 		if (ObfVMAllowAntiDebugBypass) {
 			FunctionCallee GetEnv = M.getOrInsertFunction("getenv",
 				FunctionType::get(PtrTy, { PtrTy }, false));
-			Value* EnvName = B.CreateGlobalStringPtr(
+			Value* EnvName = B.CreateGlobalString(
 				"__OBF_DISABLE_ANTIDEBUG", "vm.ad.envname");
 			Value* EnvVal = B.CreateCall(GetEnv, { EnvName }, "vm.ad.env");
 			Value* EnvSet = B.CreateICmpNE(EnvVal,

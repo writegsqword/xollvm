@@ -218,8 +218,8 @@ void VMImpl::wireLiveDecoys(Function* EF) {
 		if (BB.getName().starts_with("vm.cl.")) continue;    // CALL sub-blocks
 
 		Instruction* Term = BB.getTerminator();
-		auto* Br = dyn_cast_or_null<BranchInst>(Term);
-		if (!Br) continue;                                   // only br / condbr terminators
+		if (!isa_and_nonnull<UncondBrInst, CondBrInst>(Term))
+			continue;                                          // only br / condbr terminators
 
 		if (LiveRng.range(2) != 0) continue;                 // ~50% density
 		unsigned DecoyIdx = LiveRng.range(NumDecoys);
