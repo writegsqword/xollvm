@@ -133,9 +133,19 @@ set(OBF_SOURCES
 # Target
 # ---------------------------------------------------------------------------
 # ObfuscationConfig.cpp uses C++ exceptions (try/throw/catch, contained within
-# that TU). LLVM builds -fno-exceptions by default (MSVC tolerates, clang/gcc
-# reject); opt this module into EH. AddLLVM applies the right per-compiler flag.
-set(LLVM_REQUIRES_EH ON)
+# that TU). Keep the rest of the extension aligned with LLVM's normal
+# -fno-exceptions/-fno-rtti ABI and enable exceptions only for the parser TU.
+# LLVM_REQUIRES_EH couples exceptions to RTTI for the entire target, which does
+# not link into Chromium's LLVM build.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties(
+    ObfuscationConfig.cpp
+    PROPERTIES COMPILE_OPTIONS "-fexceptions"
+  )
+else()
+  message(FATAL_ERROR
+    "ObfuscationConfig.cpp exception flags are not pinned for this compiler")
+endif()
 
 # Directory-scope includes: the module's own headers (include/llvm/Transforms/
 # Obfuscator/** — prefix preserved) and the generated AES bitcode header. Set
