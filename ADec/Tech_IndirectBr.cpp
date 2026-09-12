@@ -33,10 +33,6 @@ static bool canConvertBranch(llvm::UncondBrInst* BI) {
 	return true;
 }
 
-static bool blockHasPhis(llvm::BasicBlock* BB) {
-	return BB && !BB->empty() && llvm::isa<llvm::PHINode>(&BB->front());
-}
-
 class IndirectBrTechnique final : public ADecTechnique {
 public:
 	llvm::StringRef name() const override { return "indirectBr"; }
@@ -84,38 +80,66 @@ public:
 			if (Ctx.SelectRng.range(100) >= (uint32_t)EffProb)
 				continue;
 
+			llvm::BasicBlock* Source = BI->getParent();
 			llvm::BasicBlock* Target = BI->getSuccessor(0);
 
 			llvm::IRBuilder<> EntryB(&*Entry.getFirstInsertionPt());
 			llvm::AllocaInst* Slot =
 			    EntryB.CreateAlloca(PtrTy, nullptr, Ctx.prefixed("ibr.slot"));
+			llvm::AllocaInst* Trace = EntryB.CreateAlloca(
+			    llvm::Type::getInt8Ty(C), nullptr, Ctx.prefixed("ibr.trace"));
+
+			// A single known BlockAddress, even when routed through a volatile
+			// stack slot, is folded back to a direct branch by the post-extension
+			// optimization pipeline. Route through two semantically equivalent
+			// destination blocks and choose between them using an address-derived
+			// value that is unavailable at compile time. The distinct volatile
+			// stores prevent the destinations from being merged. Both paths join
+			// before entering Target, so the original edge semantics are retained.
+			llvm::BasicBlock* Dest0 = llvm::BasicBlock::Create(
+			    C, Ctx.prefixed("ibr.dest0"), &Ctx.F);
+			llvm::BasicBlock* Dest1 = llvm::BasicBlock::Create(
+			    C, Ctx.prefixed("ibr.dest1"), &Ctx.F);
+			llvm::BasicBlock* Join = llvm::BasicBlock::Create(
+			    C, Ctx.prefixed("ibr.join"), &Ctx.F);
+
+			llvm::IRBuilder<> D0(Dest0);
+			auto* D0Store = D0.CreateStore(
+			    llvm::ConstantInt::get(llvm::Type::getInt8Ty(C), 0), Trace);
+			D0Store->setVolatile(true);
+			D0.CreateBr(Join);
+
+			llvm::IRBuilder<> D1(Dest1);
+			auto* D1Store = D1.CreateStore(
+			    llvm::ConstantInt::get(llvm::Type::getInt8Ty(C), 1), Trace);
+			D1Store->setVolatile(true);
+			D1.CreateBr(Join);
+
+			llvm::IRBuilder<> JoinB(Join);
+			JoinB.CreateBr(Target);
+			for (llvm::PHINode& Phi : Target->phis())
+				Phi.replaceIncomingBlockWith(Source, Join);
 
 			llvm::IRBuilder<> B(BI);
-			llvm::Value* BA = llvm::BlockAddress::get(&Ctx.F, Target);
+			llvm::Value* SlotInt = B.CreatePtrToInt(
+			    Slot, llvm::Type::getInt64Ty(C), Ctx.prefixed("ibr.entropy"));
+			llvm::Value* Shifted = B.CreateLShr(
+			    SlotInt, llvm::ConstantInt::get(llvm::Type::getInt64Ty(C), 4));
+			llvm::Value* Pick = B.CreateTrunc(
+			    Shifted, llvm::Type::getInt1Ty(C), Ctx.prefixed("ibr.pick"));
+			llvm::Value* BA = B.CreateSelect(
+			    Pick, llvm::BlockAddress::get(&Ctx.F, Dest1),
+			    llvm::BlockAddress::get(&Ctx.F, Dest0), Ctx.prefixed("ibr.target"));
 			auto* St = B.CreateStore(BA, Slot);
 			St->setVolatile(true);
 
 			auto* Ld = B.CreateLoad(PtrTy, Slot, Ctx.prefixed("ibr.addr"));
 			Ld->setVolatile(true);
 
-			// Build N synthetic dead decoys (each = empty BB with
-			// `unreachable`). These never execute (the loaded slot
-			// holds Target's BlockAddress) but make the indirectbr
-			// destination list non-trivial. Synthetic BBs have zero
-			// SSA operands and zero successors, so they cannot
-			// violate dominance regardless of where SrcBB sits in
-			// the CFG.
-			constexpr unsigned kNumDecoys = 3;
 			auto* IBr = llvm::IndirectBrInst::Create(
-			    Ld, 1 + kNumDecoys, BI->getIterator());
-			IBr->addDestination(Target);
-
-			for (unsigned i = 0; i < kNumDecoys; ++i) {
-				llvm::BasicBlock* Decoy = llvm::BasicBlock::Create(
-				    C, Ctx.prefixed("ibr.decoy"), &Ctx.F);
-				new llvm::UnreachableInst(C, Decoy);
-				IBr->addDestination(Decoy);
-			}
+			    Ld, 2, BI->getIterator());
+			IBr->addDestination(Dest0);
+			IBr->addDestination(Dest1);
 
 			BI->eraseFromParent();
 
