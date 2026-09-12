@@ -23,6 +23,16 @@ Run it against a standalone plugin build:
 ./run.sh /path/to/Obfuscator.so
 ```
 
+Run the production-style path against a Clang with the obfuscator linked in:
+
+```sh
+./run-static-clang.sh /path/to/xollvm/clang
+```
+
+The static-Clang test additionally checks that indirect branches and calls
+survive to machine code, the deterministic inline-assembly exclusion is
+reported, and decrypted static storage remains valid after `fork()`.
+
 ## Current design assessment
 
 `storage=global` is the most practical first implementation for browser code:
