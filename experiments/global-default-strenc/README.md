@@ -2,10 +2,9 @@
 
 This project isolates two changes from any Chromium build:
 
-1. `-obf-default-config=<spec>` supplies one baseline configuration to every
-   defined IR function. Source annotations are optional and, when present,
-   overlay the baseline. The intended Chromium integration uses no source
-   annotations.
+1. `-obf-default-config=<spec>` supplies one uniform configuration to every
+   defined IR function. Source `obf:` annotations are rejected while it is set;
+   unrelated annotation namespaces are ignored.
 2. `strenc(storage=global,cipher=aes)` encrypts the initializer of the original
    string global and decrypts the same storage from a priority-zero module
    constructor. It is an experimental alternative to the legacy per-call stack

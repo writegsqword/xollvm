@@ -181,8 +181,8 @@ clang-cl /O2 /c test.cpp `
 Only functions carrying an `obf:` annotation are transformed; without
 annotations the flag is normally a no-op. To apply one configuration to every
 defined function without rewriting sources, pass it through
-`-mllvm -obf-default-config='<spec>'`. Function annotations, if present, overlay
-matching pass parameters from that baseline. Do not combine this with a separate
+`-mllvm -obf-default-config='<spec>'`. Source `obf:` annotations are rejected
+while it is set so the configuration remains uniform. Do not combine this with a separate
 `opt -passes=obfuscation` step on the same IR (it would run twice).
 
 **Visual Studio / MSBuild:** set the project's compiler to xollvm's `clang-cl`
@@ -209,7 +209,7 @@ opt -passes=obf-metrics -S test.ll -o /dev/null > metrics.jsonl
 
 | Option | Default | Meaning |
 |---|---:|---|
-| `-obf-default-config=<spec>` | "" | Apply one baseline pass configuration to every defined function. Source `obf:` annotations overlay matching parameters. |
+| `-obf-default-config=<spec>` | "" | Apply one uniform pass configuration to every defined function. Source `obf:` annotations are rejected while it is set. |
 | `-obf-seed=<N>` | 0 | Base seed. Non-zero makes all runs reproducible. |
 | `-obf-deterministic` | off | When seed is 0: derive module seed from module identifier hash (otherwise uses `random_device`). |
 | `-obf-verify` | off | Run IR verification before/after each obfuscation stage. |

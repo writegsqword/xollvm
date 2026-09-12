@@ -19,7 +19,7 @@ cl::opt<bool> llvm::ObfVerbose("obf-verbose",
 cl::opt<std::string> llvm::ObfDefaultConfig(
 	"obf-default-config",
 	cl::desc("Obfuscation configuration applied to every defined function; "
-	         "source annotations overlay matching pass parameters."),
+	         "source obf: annotations are rejected when this is set."),
 	cl::init(""));
 
 cl::opt<bool> llvm::ObfSeedManifest(

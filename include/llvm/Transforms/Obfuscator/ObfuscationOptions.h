@@ -12,9 +12,10 @@ namespace llvm {
 	extern llvm::cl::opt<bool> ObfVerbose;
 
 	// Module-wide fallback configuration. When non-empty, this configuration is
-	// applied to every defined function before any source annotations are
-	// overlaid. This provides global protection without synthesizing
-	// llvm.global.annotations or rewriting source files.
+	// applied uniformly to every defined function. Source obf: annotations are
+	// rejected when it is set, preventing per-function divergence. This provides
+	// global protection without synthesizing llvm.global.annotations or
+	// rewriting source files.
 	extern llvm::cl::opt<std::string> ObfDefaultConfig;
 
 

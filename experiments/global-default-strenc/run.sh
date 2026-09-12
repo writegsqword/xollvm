@@ -26,6 +26,19 @@ opt -load-pass-plugin="$plugin" -passes=obf-dump-config \
 for function in branch_and_call leaf main; do
   grep -q "OBF-CONFIG-FN $function" "$work/defaults.config"
 done
+
+clang -S -emit-llvm -O1 "$here/annotation_rejected.c" \
+  -o "$work/annotation_rejected.ll"
+if opt -load-pass-plugin="$plugin" -passes=obfuscation \
+    -obf-default-config='constenc(prob=10)' \
+    -disable-output "$work/annotation_rejected.ll" \
+    >"$work/annotation_rejected.out" 2>&1; then
+  echo "source obf: annotation unexpectedly overrode the uniform default" >&2
+  exit 1
+fi
+grep -q 'source obf: annotation conflicts with uniform' \
+  "$work/annotation_rejected.out"
+
 opt -load-pass-plugin="$plugin" \
   -passes=obfuscation -obf-seed=7 -obf-deterministic -obf-verify \
   -obf-default-config='adec(prob=100,maxSites=80,strength=0,ibr=1,ibrProb=100,callObfuscation=1,callProb=100,asm=0,stack=0,decoy=0,alias=0,fakeLoop=0,rdtsc=0,constLaunder=0)' \

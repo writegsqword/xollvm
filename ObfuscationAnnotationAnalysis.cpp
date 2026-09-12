@@ -5,7 +5,6 @@
 #include "llvm/Transforms/Obfuscator/ObfuscationOptions.h"
 #include "llvm/Transforms/Obfuscator/Rng.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <algorithm>
 #include <random>
 
 
@@ -29,33 +28,6 @@ static uint64_t computeModuleSeed(const Module& M) {
 	uint64_t d = (uint64_t)rd();
 	return (a << 48) ^ (b << 32) ^ (c << 16) ^ d;
 }
-
-static void overlayConfig(ObfuscationConfig& Base,
-	const ObfuscationConfig& Overlay) {
-	for (const PassConfig& Incoming : Overlay.passes) {
-		auto Existing = std::find_if(
-			Base.passes.begin(), Base.passes.end(), [&](const PassConfig& PC) {
-				return PC.passName == Incoming.passName;
-			});
-		if (Existing == Base.passes.end()) {
-			Base.passes.push_back(Incoming);
-			continue;
-		}
-
-		Existing->enabled = Incoming.enabled;
-		if (!Incoming.rawInner.empty())
-			Existing->rawInner = Incoming.rawInner;
-		for (const auto& KV : Incoming.params)
-			Existing->params[KV.first] = KV.second;
-	}
-
-	if (Overlay.budgetMultiplier)
-		Base.budgetMultiplier = Overlay.budgetMultiplier;
-	if (Overlay.budgetHardCap)
-		Base.budgetHardCap = Overlay.budgetHardCap;
-}
-
-
 
 ObfuscationAnnotationAnalysis::Result
 ObfuscationAnnotationAnalysis::run(Module& M, ModuleAnalysisManager& MAM) {
@@ -84,8 +56,15 @@ ObfuscationAnnotationAnalysis::run(Module& M, ModuleAnalysisManager& MAM) {
 		if (F.isDeclaration())
 			continue;
 
-		ObfuscationConfig Cfg = DefaultConfig;
-		overlayConfig(Cfg, AnnotationParser::parseAnnotations(&F));
+		ObfuscationConfig SourceConfig = AnnotationParser::parseAnnotations(&F);
+		if (!DefaultConfig.passes.empty() && !SourceConfig.passes.empty())
+			report_fatal_error(
+				"source obf: annotation conflicts with uniform "
+				"-obf-default-config");
+
+		ObfuscationConfig Cfg = DefaultConfig.passes.empty()
+			? std::move(SourceConfig)
+			: DefaultConfig;
 		if (!Cfg.passes.empty())
 			Out.PerFunction[&F] = std::move(Cfg);
 	}
