@@ -4,6 +4,8 @@
 #include "llvm/Transforms/Obfuscator/ObfuscationConfig.h"
 #include "llvm/Transforms/Obfuscator/ObfuscationOptions.h"
 #include "llvm/Transforms/Obfuscator/Rng.h"
+#include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
 #include <random>
 
 
@@ -28,6 +30,31 @@ static uint64_t computeModuleSeed(const Module& M) {
 	return (a << 48) ^ (b << 32) ^ (c << 16) ^ d;
 }
 
+static void overlayConfig(ObfuscationConfig& Base,
+	const ObfuscationConfig& Overlay) {
+	for (const PassConfig& Incoming : Overlay.passes) {
+		auto Existing = std::find_if(
+			Base.passes.begin(), Base.passes.end(), [&](const PassConfig& PC) {
+				return PC.passName == Incoming.passName;
+			});
+		if (Existing == Base.passes.end()) {
+			Base.passes.push_back(Incoming);
+			continue;
+		}
+
+		Existing->enabled = Incoming.enabled;
+		if (!Incoming.rawInner.empty())
+			Existing->rawInner = Incoming.rawInner;
+		for (const auto& KV : Incoming.params)
+			Existing->params[KV.first] = KV.second;
+	}
+
+	if (Overlay.budgetMultiplier)
+		Base.budgetMultiplier = Overlay.budgetMultiplier;
+	if (Overlay.budgetHardCap)
+		Base.budgetHardCap = Overlay.budgetHardCap;
+}
+
 
 
 ObfuscationAnnotationAnalysis::Result
@@ -44,11 +71,21 @@ ObfuscationAnnotationAnalysis::run(Module& M, ModuleAnalysisManager& MAM) {
 		Out.AnnotationsInit = nullptr;
 	}
 
+	ObfuscationConfig DefaultConfig;
+	if (!ObfDefaultConfig.empty()) {
+		DefaultConfig =
+			AnnotationParser::parseAnnotationString(ObfDefaultConfig);
+		if (DefaultConfig.passes.empty())
+			report_fatal_error(
+				"-obf-default-config did not contain any valid passes");
+	}
+
 	for (Function& F : M) {
 		if (F.isDeclaration())
 			continue;
 
-		ObfuscationConfig Cfg = AnnotationParser::parseAnnotations(&F);
+		ObfuscationConfig Cfg = DefaultConfig;
+		overlayConfig(Cfg, AnnotationParser::parseAnnotations(&F));
 		if (!Cfg.passes.empty())
 			Out.PerFunction[&F] = std::move(Cfg);
 	}

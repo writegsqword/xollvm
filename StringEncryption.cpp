@@ -321,6 +321,7 @@ namespace {
             Acc.useAES = false;
             Acc.keySplit = false;
             Acc.useChaCha = false;
+			Acc.useGlobalStorage = false;
 
             for (auto& It : Ann.PerFunction) {
                 auto PC = It.second.getPassConfig("strenc");
@@ -334,6 +335,7 @@ namespace {
                 if (Local.useAES)    Acc.useAES = true;
                 if (Local.keySplit)  Acc.keySplit = true;
                 if (Local.useChaCha) Acc.useChaCha = true;
+				if (Local.useGlobalStorage) Acc.useGlobalStorage = true;
             }
 
             // ── NEW: collect strenc_stub config ──────────────────────────────────────
@@ -447,7 +449,8 @@ namespace {
         static bool isAddressTakenAsInteger(Constant* C);
 
         /// True if GV should be encrypted (is a non-empty, eligible string).
-        static bool shouldEncrypt(GlobalVariable& GV, int minLength);
+        static bool shouldEncrypt(GlobalVariable& GV, int minLength,
+			bool preserveAddress = false);
 
         /// Create a private constant global for the ciphertext bytes.
         static GlobalVariable* createCiphertextGlobal(Module& M,
@@ -473,6 +476,11 @@ namespace {
 
         // ── Top-level entry ───────────────────────────────────────────────────────
         static bool encryptStrings(Module& M, StrEncCtx& Ctx);
+
+		// Mutate the original globals to ciphertext and decrypt them once from
+		// an early module constructor. Unlike the legacy stack strategy, this
+		// preserves string lifetime and address identity.
+		static bool encryptStringsGlobal(Module& M, StrEncCtx& Ctx);
 
         // ── ChaCha20 path (used when useChaCha=true) ──────────────────────────────
         static bool encryptStringsChaCha(Module& M, StrEncCtx& Ctx);
@@ -690,7 +698,8 @@ namespace {
         return false;
     }
 
-    bool StrEncImpl::shouldEncrypt(GlobalVariable& GV, int minLength) {
+    bool StrEncImpl::shouldEncrypt(GlobalVariable& GV, int minLength,
+	bool preserveAddress) {
         if (!GV.hasInitializer() || !GV.isConstant()) return false;
         auto* CDA = dyn_cast<ConstantDataArray>(GV.getInitializer());
         if (!CDA || !CDA->isCString()) return false;
@@ -710,7 +719,7 @@ namespace {
         // per-call stack buffer, which has a different (and non-stable)
         // address than the original global — breaking pointer-identity
         // code (e.g. rustc string-literal merging + ptrtoint match tables).
-        if (isAddressTakenAsInteger(&GV)) return false;
+        if (!preserveAddress && isAddressTakenAsInteger(&GV)) return false;
 
         return true;
     }
@@ -960,6 +969,104 @@ namespace {
 
         return Changed;
     }
+
+	// ── StrEncImpl::encryptStringsGlobal ───────────────────────────────────────
+	// Experimental static-lifetime strategy. The original GlobalVariable is
+	// retained, made writable, and initialized with AES-CTR ciphertext. A
+	// priority-zero module constructor decrypts that same allocation before
+	// ordinary C++ dynamic initializers. All existing uses therefore retain the
+	// same pointer and static storage duration.
+
+	bool StrEncImpl::encryptStringsGlobal(Module& M, StrEncCtx& Ctx) {
+		struct Candidate {
+			GlobalVariable* GV;
+			std::string Plaintext;
+			unsigned Index;
+		};
+
+		std::vector<Candidate> Cands;
+		unsigned Index = 0;
+		for (GlobalVariable& GV : M.globals()) {
+			if (!shouldEncrypt(GV, Ctx.Cfg.minLength,
+				/*preserveAddress=*/true))
+				continue;
+			// A process constructor cannot initialize a separate TLS instance, and
+			// explicitly placed sections may remain read-only despite isConstant.
+			// These are deterministic compatibility exclusions for this prototype.
+			if (GV.isThreadLocal() || GV.hasSection() || !GV.hasLocalLinkage())
+				continue;
+			auto* CDA = dyn_cast<ConstantDataArray>(GV.getInitializer());
+			if (!CDA || !CDA->isCString())
+				continue;
+			Cands.push_back({&GV, CDA->getAsCString().str(), Index++});
+		}
+
+		if (Cands.empty())
+			return false;
+
+		Function* DecryptFn = linkStub(M);
+		if (!DecryptFn) {
+			errs() << "strenc: AES stub link failed — skipping global encryption\n";
+			return false;
+		}
+
+		auto& MutableCache =
+			Ctx.MAM.getResult<ObfuscationAnnotationAnalysis>(M);
+		hardenStubFunctions(M, Ctx.Cfg.stubPasses, MutableCache);
+
+		GlobalVariable* KDG = createKeyDataGlobal(M, Ctx.ExpandedKeys);
+		Ctx.KeyDataFn = createKeyDataFn(M, KDG);
+		Ctx.KeyCodeFn = createKeyCodeFn(M, Ctx.ExpandedKeys);
+		Ctx.KeyDataGV = KDG;
+		Ctx.DecryptFn = DecryptFn;
+
+		LLVMContext& C = M.getContext();
+		Type* I8Ty = Type::getInt8Ty(C);
+		Type* I32Ty = Type::getInt32Ty(C);
+		FunctionType* InitTy = FunctionType::get(Type::getVoidTy(C), false);
+		Function* InitFn = Function::Create(
+			InitTy, GlobalValue::InternalLinkage, "__strenc_global_init", M);
+		InitFn->addFnAttr(Attribute::NoUnwind);
+		BasicBlock* Entry = BasicBlock::Create(C, "entry", InitFn);
+		IRBuilder<> B(Entry);
+
+		for (Candidate& Cand : Cands) {
+			uint64_t Nonce = fnv64_nonce(Cand.Index, Cand.Plaintext);
+			std::string Cipher = Cand.Plaintext;
+			aes128_ctr(Ctx.ExpandedKeys,
+				reinterpret_cast<const uint8_t*>(&Nonce),
+				reinterpret_cast<uint8_t*>(Cipher.data()), Cipher.size());
+
+			ArrayType* ArrTy = cast<ArrayType>(Cand.GV->getValueType());
+			std::vector<Constant*> Bytes;
+			Bytes.reserve(Cipher.size() + 1);
+			for (unsigned char Ch : Cipher)
+				Bytes.push_back(ConstantInt::get(I8Ty, Ch));
+			Bytes.push_back(ConstantInt::get(I8Ty, 0));
+
+			Cand.GV->setInitializer(ConstantArray::get(ArrTy, Bytes));
+			Cand.GV->setConstant(false);
+
+			GlobalVariable* NonceGV =
+				createNonceGlobal(M, Nonce, Cand.Index);
+			ArrayType* NonceTy = cast<ArrayType>(NonceGV->getValueType());
+			Value* Dst = gepI8(B, ArrTy, Cand.GV);
+			Value* NoncePtr = gepI8(B, NonceTy, NonceGV);
+			B.CreateCall(DecryptFn, {
+				Dst,
+				ConstantInt::get(I32Ty,
+					static_cast<uint32_t>(Cipher.size())),
+				NoncePtr
+			});
+
+			++EncryptedStrings;
+			++DecryptCallsInserted;
+		}
+
+		B.CreateRetVoid();
+		appendToGlobalCtors(M, InitFn, /*Priority=*/0);
+		return true;
+	}
 
     // ── StrEncImpl::encryptStringsChaCha ─────────────────────────────────────────
     // The hardened string-encryption path (redesign phases A-E). Mirrors
@@ -1574,10 +1681,13 @@ PreservedAnalyses StringEncryptionPass::run(Module& M,
             << " aes=" << Ctx.Cfg.useAES
             << " keysplit=" << Ctx.Cfg.keySplit
             << " chacha=" << Ctx.Cfg.useChaCha
+			<< " storage=" << (Ctx.Cfg.useGlobalStorage ? "global" : "stack")
             << "\n";
     }
 
-    bool Changed = Ctx.Cfg.useChaCha
+    bool Changed = Ctx.Cfg.useGlobalStorage
+		? StrEncImpl::encryptStringsGlobal(M, Ctx)
+		: Ctx.Cfg.useChaCha
         ? StrEncImpl::encryptStringsChaCha(M, Ctx)
         : Ctx.Cfg.useAES
             ? StrEncImpl::encryptStrings(M, Ctx)

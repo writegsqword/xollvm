@@ -16,6 +16,12 @@ cl::opt<bool> llvm::ObfVerbose("obf-verbose",
 	cl::desc("Verbose obfuscator logging."),
 	cl::init(false));
 
+cl::opt<std::string> llvm::ObfDefaultConfig(
+	"obf-default-config",
+	cl::desc("Obfuscation configuration applied to every defined function; "
+	         "source annotations overlay matching pass parameters."),
+	cl::init(""));
+
 cl::opt<bool> llvm::ObfSeedManifest(
 	"obf-seed-manifest",
 	llvm::cl::desc("Print per-function/per-pass seed manifest (debug)"),

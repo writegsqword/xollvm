@@ -189,6 +189,11 @@ namespace llvm {
 		//         (simpler, weaker)
 		bool useChaCha = false;      // true → ChaCha20 (tableless). Takes precedence
 		                             // over useAES in dispatch. Opt-in via cipher=chacha.
+		// Keep the original string global, replace its initializer with
+		// ciphertext, and decrypt it from an early module constructor. This
+		// preserves static lifetime and pointer identity. The legacy false mode
+		// uses a fresh stack buffer in every function that references the string.
+		bool useGlobalStorage = false;
 		// Passes to apply to the linked stub functions.
 		// Populated from a sibling strenc_stub(...) annotation token.
 		ObfuscationConfig stubPasses;
@@ -387,4 +392,3 @@ namespace llvm {
 
 
 } // namespace llvm
-

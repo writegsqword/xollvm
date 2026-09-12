@@ -91,10 +91,10 @@ function analysis `function-obf-context`; module passes `obfuscation`, `obf-dump
 per the pipeline (below), driven by `obf:` annotations, not by name on the `opt` command line.
 
 There is also a clang extension-point hook: `-mllvm -enable-obfuscation` (hidden flag, default
-off) injects `ObfuscationModulePass` at the start of clang's own compile pipeline, so an annotated
-source file obfuscates during a normal `-c` compile with no separate `opt` round-trip. Off by
-default → pipeline byte-identical; still annotation-gated when on, so unannotated code is untouched
-either way.
+off) injects `ObfuscationModulePass` at the start of clang's own compile pipeline. Source
+annotations remain supported, while `-mllvm -obf-default-config=<spec>` applies a baseline to
+every definition without rewriting source. With neither configuration source, the pass is a
+no-op.
 
 ### Module entry pass
 
@@ -109,7 +109,8 @@ either way.
 
 ### Annotation cache
 
-`ObfuscationAnnotationAnalysis` parses `llvm.global.annotations` exactly once per module:
+`ObfuscationAnnotationAnalysis` resolves the module default and
+`llvm.global.annotations` exactly once per module:
 
 - Produces a `Function* → ObfuscationConfig` map.
 - Computes module seed derivation data (module identifier, options).

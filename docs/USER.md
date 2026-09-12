@@ -179,7 +179,10 @@ clang-cl /O2 /c test.cpp `
 ```
 
 Only functions carrying an `obf:` annotation are transformed; without
-annotations the flag is a no-op. Do not combine this with a separate
+annotations the flag is normally a no-op. To apply one configuration to every
+defined function without rewriting sources, pass it through
+`-mllvm -obf-default-config='<spec>'`. Function annotations, if present, overlay
+matching pass parameters from that baseline. Do not combine this with a separate
 `opt -passes=obfuscation` step on the same IR (it would run twice).
 
 **Visual Studio / MSBuild:** set the project's compiler to xollvm's `clang-cl`
@@ -206,6 +209,7 @@ opt -passes=obf-metrics -S test.ll -o /dev/null > metrics.jsonl
 
 | Option | Default | Meaning |
 |---|---:|---|
+| `-obf-default-config=<spec>` | "" | Apply one baseline pass configuration to every defined function. Source `obf:` annotations overlay matching parameters. |
 | `-obf-seed=<N>` | 0 | Base seed. Non-zero makes all runs reproducible. |
 | `-obf-deterministic` | off | When seed is 0: derive module seed from module identifier hash (otherwise uses `random_device`). |
 | `-obf-verify` | off | Run IR verification before/after each obfuscation stage. |
@@ -756,8 +760,9 @@ int licensed(int key, int data) { return key ^ data; }
 ### strenc
 
 String encryption — **module-only** pass. Finds string literal globals whose length meets the
-minimum threshold and encrypts them at compile time. A `.init_array` constructor decrypts
-them at process load time.
+minimum threshold and encrypts them at compile time. The legacy mode decrypts into a per-call
+stack buffer. Experimental `storage=global` instead decrypts the original writable global from
+an early `.init_array` constructor, preserving static lifetime and pointer identity.
 
 Three ciphers are available via the `cipher` key:
 
@@ -777,6 +782,7 @@ cipher (or `keysplit`), it is applied to every encrypted string in the module.
 | `cipher` | `aes` | `aes`/`chacha`/`xor` | Cipher selection (see above). `chacha` wins over `aes`. |
 | `aes` | 1 | 0/1 | Shorthand toggle for the AES path. `aes=0` falls back to the XOR keystream (unless `cipher=chacha`). |
 | `keysplit` | 1 | 0/1 | AES path only — split the 176-byte AES round-key schedule across module segments so the full key never appears contiguously. |
+| `storage` | `stack` | `stack`/`global` | Storage strategy. Experimental `global` currently requires AES and preserves the original global's address. |
 
 Example:
 

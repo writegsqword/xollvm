@@ -48,7 +48,7 @@ xollvm plugs into **stock LLVM with no LLVM source edits** — it is compiled in
 
 - **Module entry pass**: `-passes=obfuscation` — module-only work (`fmerge`, `strenc`) then an
   ordered per-function pipeline.
-- **Annotation-driven config** with canonical pass IDs + aliases.
+- **Annotation or module-default config** with canonical pass IDs + aliases.
 - **Deterministic seeding** (module → function → pass) with an optional seed manifest.
 - **Safety rails**: instruction/block/loop-depth gating + IR-growth budgeting.
 - **Diagnostics**: `-passes=obf-dump-config`, `-passes=obf-metrics`.
@@ -93,9 +93,9 @@ Module-only:
 
 ## How it works
 
-Annotations drive everything. A module analysis parses `llvm.global.annotations` once into a
-cached `Function → Config` map; the module entry pass then runs module-only `fmerge` and `strenc`
-and a deterministic, budget-gated per-function pipeline.
+Annotations or `-obf-default-config` drive the pipeline. A module analysis resolves them once
+into a cached `Function → Config` map; the module entry pass then runs module-only `fmerge` and
+`strenc` and a deterministic, budget-gated per-function pipeline.
 
 <p align="center">
   <img src="docs/img/pipeline_overview.svg" alt="xollvm end-to-end pipeline: source annotations to obfuscated IR" width="820">

@@ -218,7 +218,12 @@ ObfuscationConfig AnnotationParser::parseAnnotations(Function* F) {
 	}
 
 	// Parse each annotation and merge
+	static const std::regex ObfAnnotationPrefix(R"(^\s*obf\s*:)");
 	for (const auto& ann : annotations) {
+		// Clang and large projects use annotate() for unrelated compiler
+		// metadata. Only the explicit obf: namespace belongs to this parser.
+		if (!std::regex_search(ann, ObfAnnotationPrefix))
+			continue;
 		if (ObfVerbose) errs() << "  Parsing: '" << ann << "'\n";
 
 		ObfuscationConfig parsedConfig = parseAnnotationString(ann);
@@ -816,6 +821,23 @@ StringEncryptionConfig::fromPassConfig(const PassConfig& pc) {
 			else if (v == "aes") { cfg.useChaCha = false; cfg.useAES = true;  }
 			else if (v == "xor") { cfg.useChaCha = false; cfg.useAES = false; }
 		}
+
+		// storage=global is the static-lifetime experiment. "static" is
+		// accepted as a descriptive alias; serialized configs use "global".
+		if (pc.params.count("storage")) {
+			const std::string& v = pc.params.at("storage");
+			if (v == "global" || v == "static")
+				cfg.useGlobalStorage = true;
+			else if (v == "stack")
+				cfg.useGlobalStorage = false;
+			else
+				throw std::invalid_argument(
+					"strenc storage must be stack, global, or static");
+		}
+
+		if (cfg.useGlobalStorage && (cfg.useChaCha || !cfg.useAES))
+			throw std::invalid_argument(
+				"strenc storage=global currently requires cipher=aes");
 	}
 	catch (const std::exception& e) {
 		errs() << "[strenc] error parsing params: " << e.what() << "\n";

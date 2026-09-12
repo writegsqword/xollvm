@@ -11,6 +11,12 @@ namespace llvm {
 	extern llvm::cl::opt<bool> ObfDeterministic;
 	extern llvm::cl::opt<bool> ObfVerbose;
 
+	// Module-wide fallback configuration. When non-empty, this configuration is
+	// applied to every defined function before any source annotations are
+	// overlaid. This provides global protection without synthesizing
+	// llvm.global.annotations or rewriting source files.
+	extern llvm::cl::opt<std::string> ObfDefaultConfig;
+
 
 	extern llvm::cl::opt<bool> ObfSeedManifest;
 	extern llvm::cl::opt<bool> ObfSeedManifestMD;
