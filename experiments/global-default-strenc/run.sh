@@ -74,4 +74,30 @@ if strings "$work/static_lifetime.direct" | grep -q \
   exit 1
 fi
 
+# Compile two independently transformed translation units, first into a
+# normal executable and then across a shared-library load boundary.
+for source in component component_main; do
+  clang++ -O0 -Xclang -disable-O0-optnone -fPIC -c \
+    -fpass-plugin="$plugin" -mllvm -enable-obfuscation \
+    '-mllvm=-obf-default-config=strenc(cipher=aes,storage=global,minlen=8)' \
+    "$here/$source.cpp" -o "$work/$source.o"
+done
+
+clang++ "$work/component_main.o" "$work/component.o" \
+  -o "$work/multi_tu"
+"$work/multi_tu"
+
+clang++ -shared "$work/component.o" -o "$work/libcomponent.so"
+clang++ "$work/component_main.o" -L"$work" -lcomponent \
+  -Wl,-rpath,'$ORIGIN' -o "$work/shared_boundary"
+"$work/shared_boundary"
+
+for artifact in "$work/multi_tu" "$work/libcomponent.so" \
+    "$work/shared_boundary"; do
+  if strings "$artifact" | grep -q 'xollvm-component-sentinel-9P6M3'; then
+    echo "component plaintext remains in $artifact" >&2
+    exit 1
+  fi
+done
+
 echo "global-default and static-lifetime strenc experiment passed"

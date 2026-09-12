@@ -14,8 +14,9 @@ This project isolates two changes from any Chromium build:
 The test checks both the named `opt` pass and Clang's normal extension point,
 plus unannotated-function selection, indirect branches/calls, constructor
 ordering, returned-pointer lifetime, pointer identity, a pointer stored in a
-global initializer, and absence of the sentinel plaintext in the final
-executable.
+global initializer, independently transformed translation units, a shared
+library load boundary, and absence of the sentinel plaintext in linked ELF
+artifacts.
 
 Run it against a standalone plugin build:
 
@@ -49,7 +50,6 @@ Other viable designs, not implemented here:
   loader hook.
 
 The global-startup approach should not be enabled for Chromium until tests
-cover multiple translation units, shared libraries, static initializer order,
-`fork`, and the current Chromium LLVM revision. It also needs private skip
-reporting and a decision on whether generated decrypt helpers receive the same
-default function passes.
+cover `fork`, priority-zero constructor collisions, and the current Chromium
+LLVM revision. It also needs private skip reporting and a decision on whether
+generated decrypt helpers receive the same default function passes.
