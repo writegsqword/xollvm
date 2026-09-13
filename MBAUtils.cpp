@@ -447,6 +447,25 @@ Value* MbaUtils::applyMBARecursive(IRBuilder<>& B, BinaryOperator* BO,
 	if (depth == 0 || !BO)
 		return BO;
 
+	// Every MBA identity duplicates one or both operands.  Raw `undef` values
+	// may choose a different bit pattern at each use, so an algebraic identity
+	// that is correct for fixed bit-vectors is not necessarily correct after
+	// such duplication.  Poison has the same problem and can be introduced by
+	// operations that carry poison-generating flags.  Stabilize both operand
+	// positions once, on the original instruction, before either the core
+	// rewrite or an advanced zero builder (which reads BO's operands later)
+	// gets a chance to duplicate them.
+	//
+	// `freeze` is a no-op for defined values and a legal refinement for
+	// undef/poison.  Updating BO is intentional: addSleZero and
+	// addInputDerivedZero receive the original BO after this function returns
+	// and must observe these same stable values.
+	for (unsigned I = 0; I < 2; ++I) {
+		Value* Operand = BO->getOperand(I);
+		Value* Stable = B.CreateFreeze(Operand, "mba.operand.freeze");
+		BO->setOperand(I, Stable);
+	}
+
 	bool useAlt = (RecRng.range(2) != 0);
 	Value* NewV = useAlt ? applyAlternate(B, BO) : applyPrimary(B, BO);
 
